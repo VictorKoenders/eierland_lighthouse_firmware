@@ -4,7 +4,7 @@
 extern crate panic_halt;
 
 use cortex_m_rt::entry;
-use embedded_hal::digital::v2::OutputPin;
+use embedded_hal::digital::v2::{InputPin, OutputPin};
 use stm32f1xx_hal::{
     delay::Delay,
     device::{CorePeripherals, Peripherals},
@@ -49,8 +49,8 @@ fn main() -> ! {
     let _g1 = gpioa.pa9.into_open_drain_output(&mut gpioa.crh);
     let _b1 = gpioa.pa10.into_open_drain_output(&mut gpioa.crh);
 
-    let _but0 = gpiob.pb0.into_pull_up_input(&mut gpiob.crl);
-    let _but1 = gpiob.pb1.into_pull_up_input(&mut gpiob.crl);
+    let but0 = gpiob.pb0.into_pull_up_input(&mut gpiob.crl);
+    let but1 = gpiob.pb1.into_pull_up_input(&mut gpiob.crl);
 
     let mut leds = [
         led0.downgrade(),
@@ -72,26 +72,61 @@ fn main() -> ! {
     ledw0.set_low().unwrap();
     ledw1.set_low().unwrap();
 
-    let mut off_index = 0;
-    let mut on_index = RANGE;
+    let mut tail = 0;
+    let mut head = RANGE;
+
+    let mut direction = Direction::Right;
 
     loop {
-        leds[off_index].set_low().unwrap();
-        leds[on_index].set_high().unwrap();
+        if but0.is_low().unwrap_or(false) {
+            direction = Direction::Right;
+        }
+        if but1.is_low().unwrap_or(false) {
+            direction = Direction::Left;
+        }
+        match direction {
+            Direction::Right => {
+                leds[tail].set_low().unwrap();
+                leds[head].set_high().unwrap();
 
-        off_index = (off_index + 1) % leds.len();
-        on_index = (on_index + 1) % leds.len();
+                tail = (tail + 1) % leds.len();
+                head = (head + 1) % leds.len();
 
-        if on_index == 0 {
-            ledw0.set_high().unwrap();
-            ledw1.set_high().unwrap();
+                if head == 0 {
+                    ledw0.set_high().unwrap();
+                    ledw1.set_high().unwrap();
+                }
+
+                if head == 2 {
+                    ledw0.set_low().unwrap();
+                    ledw1.set_low().unwrap();
+                }
+            }
+            Direction::Left => {
+                leds[tail].set_high().unwrap();
+                leds[head].set_low().unwrap();
+
+                tail = if tail == 0 { leds.len() } else { tail } - 1;
+                head = if head == 0 { leds.len() } else { head } - 1;
+
+                if head == 2 {
+                    ledw0.set_high().unwrap();
+                    ledw1.set_high().unwrap();
+                }
+
+                if head == 0 {
+                    ledw0.set_low().unwrap();
+                    ledw1.set_low().unwrap();
+                }
+            }
         }
 
-        if on_index == 2 {
-            ledw0.set_low().unwrap();
-            ledw1.set_low().unwrap();
-        }
-
-        delay.delay_ms(100_u32);
+        delay.delay_ms(150_u32);
     }
+}
+
+#[derive(Debug, Copy, Clone)]
+enum Direction {
+    Left,
+    Right,
 }
